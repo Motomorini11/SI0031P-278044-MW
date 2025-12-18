@@ -1,51 +1,181 @@
 package pwr.not_mario;
 
+import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.Label;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
 import javafx.stage.Stage;
+import javafx.stage.Screen;
+import javafx.stage.StageStyle;
+import javafx.geometry.Rectangle2D;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 
 public class MainMenu {
 
-    public void start(Stage stage) {
+    private Stage stage;
+    private Scene mainScene;
+    private Scene levelSelectScene;
+    private Scene settingsScene;
+    private boolean isMusicOn = true;
 
-        // Tworzymy przyciski
-        Button startBtn = new Button("Start Game");
-        Button settingsBtn = new Button("Settings");
-        Button quitBtn = new Button("Quit");
+    public void start(Stage primaryStage) {
+        this.stage = primaryStage;
 
-        // Trochę stylu, żeby było je widać na czarnym tle
-        String buttonStyle = "-fx-font-size: 20px; -fx-min-width: 200px; -fx-background-color: white; -fx-text-fill: black;";
-        startBtn.setStyle(buttonStyle);
-        settingsBtn.setStyle(buttonStyle);
-        quitBtn.setStyle(buttonStyle);
+        // 1. Build the scenes
+        createMainScene();
+        createLevelSelectScene();
+        createSettingsScene();
 
-        // Akcje przycisków
-        startBtn.setOnAction(e -> {
-            GameWindow game = new GameWindow();
-            game.start(stage);
+        // 2. Set up the Stage
+        primaryStage.setTitle("Not Mario");
+        primaryStage.initStyle(StageStyle.UNDECORATED);
+
+        Rectangle2D screenBounds = Screen.getPrimary().getBounds();
+        primaryStage.setX(screenBounds.getMinX());
+        primaryStage.setY(screenBounds.getMinY());
+        primaryStage.setWidth(screenBounds.getWidth());
+        primaryStage.setHeight(screenBounds.getHeight());
+        primaryStage.setResizable(false);
+
+        primaryStage.setScene(mainScene);
+        primaryStage.show();
+    }
+
+    // --- ZMODYFIKOWANA METODA: Dodano parametr 'width' (szerokość pudełka) ---
+    // --- ZMODYFIKOWANA METODA: Dodano parametr 'height' (wysokość) ---
+    private Scene createStandardMenuScene(VBox contentBox, int width, int height) {
+        // 1. Stylizacja pudełka
+        contentBox.setAlignment(Pos.CENTER);
+        contentBox.setStyle("-fx-background-color: rgba(0, 0, 0, 0.6); -fx-background-radius: 20; -fx-padding: 30;");
+
+        // USTAWIAMY SZEROKOŚĆ I WYSOKOŚĆ NA SZTYWNO
+        contentBox.setMinWidth(width);
+        contentBox.setMaxWidth(width);
+
+        contentBox.setMinHeight(height); // <-- NOWOŚĆ
+        contentBox.setMaxHeight(height); // <-- NOWOŚĆ
+
+        // 2. Główny kontener (StackPane)
+        StackPane root = new StackPane();
+
+        // 3. Ładujemy tło
+        try {
+            Image bgImage = new Image(getClass().getResourceAsStream("/assets/MainMenu_background.png"));
+            ImageView bgView = new ImageView(bgImage);
+
+            // Rozciągamy tło
+            bgView.fitWidthProperty().bind(stage.widthProperty());
+            bgView.fitHeightProperty().bind(stage.heightProperty());
+
+            root.getChildren().add(bgView);
+
+        } catch (Exception e) {
+            System.out.println("Nie udało się załadować tła! Sprawdź nazwę pliku.");
+            root.setStyle("-fx-background-color: gray;");
+        }
+
+        // 4. Dodajemy pudełko na wierzch
+        root.getChildren().add(contentBox);
+
+        return new Scene(root, 800, 600);
+    }
+
+    // --- SCENE 1: MAIN MENU ---
+    private void createMainScene() {
+        // USUNIĘTO: Tytuł tekstowy (jest na grafice)
+
+        Button btnStart = createStyledButton("START GAME");
+        Button btnSettings = createStyledButton("SETTINGS");
+        Button btnQuit = createStyledButton("QUIT");
+
+        btnStart.setOnAction(e -> stage.setScene(levelSelectScene));
+        btnSettings.setOnAction(e -> stage.setScene(settingsScene));
+        btnQuit.setOnAction(e -> {
+            Platform.exit();
+            System.exit(0);
         });
 
-        quitBtn.setOnAction(e -> stage.close());
-
-        // Układ (Layout)
         VBox layout = new VBox(20);
-        layout.setAlignment(Pos.CENTER);
-        layout.getChildren().addAll(startBtn, settingsBtn, quitBtn);
+        layout.getChildren().addAll(btnStart, btnSettings, btnQuit);
 
-        // Ustawiamy czarne tło za pomocą CSS
-        layout.setStyle("-fx-background-color: black;");
+        // Ustawiam wąskie pudełko (350px) - idealne dla pionowej listy przycisków
+        mainScene = createStandardMenuScene(layout, 350, 300);
+    }
 
-        Scene scene = new Scene(layout, 800, 600);
-        stage.setScene(scene);
-        stage.setTitle("Not Mario - Menu");
+    // --- SCENE 2: LEVEL SELECT ---
+    private void createLevelSelectScene() {
+        Label titleLabel = new Label("SELECT LEVEL");
+        titleLabel.setTextFill(Color.WHITE);
+        titleLabel.setFont(new Font("Arial", 40));
 
-        // PEŁNY EKRAN
-        stage.setFullScreen(false);
-        // Opcjonalnie: usuwa komunikat "Press ESC to exit full screen"
-        stage.setFullScreenExitHint("");
+        HBox levelContainer = new HBox(15);
+        levelContainer.setAlignment(Pos.CENTER);
 
-        stage.show();
+        for (int i = 1; i <= 5; i++) {
+            int levelNum = i;
+            Button lvlBtn = createStyledButton("Level " + i);
+            lvlBtn.setPrefWidth(100);
+
+            lvlBtn.setOnAction(e -> {
+                System.out.println("Loading Level " + levelNum + "...");
+                GameScene game = new GameScene(stage, mainScene, levelNum);
+                stage.setScene(game);
+                // Usunięto requestFocus()
+            });
+
+            levelContainer.getChildren().add(lvlBtn);
+        }
+
+        Button btnBack = createStyledButton("BACK");
+        btnBack.setOnAction(e -> stage.setScene(mainScene));
+
+        VBox layout = new VBox(40);
+        layout.getChildren().addAll(titleLabel, levelContainer, btnBack);
+
+        // Ustawiam SZEROKIE pudełko (800px) - żeby przyciski poziomów się zmieściły w poziomie!
+        levelSelectScene = createStandardMenuScene(layout, 800, 400);
+    }
+
+    // --- SCENE 3: SETTINGS ---
+    private void createSettingsScene() {
+        Label titleLabel = new Label("SETTINGS");
+        titleLabel.setTextFill(Color.WHITE);
+        titleLabel.setFont(new Font("Arial", 40));
+
+        CheckBox musicCheck = new CheckBox("Music On");
+        musicCheck.setTextFill(Color.WHITE);
+        musicCheck.setSelected(isMusicOn);
+        musicCheck.setFont(new Font("Arial", 20));
+
+        musicCheck.setOnAction(e -> {
+            isMusicOn = musicCheck.isSelected();
+            System.out.println("Music set to: " + isMusicOn);
+        });
+
+        Button btnBack = createStyledButton("BACK");
+        btnBack.setOnAction(e -> stage.setScene(mainScene));
+
+        VBox layout = new VBox(30);
+        layout.getChildren().addAll(titleLabel, musicCheck, btnBack);
+
+        // Średnie pudełko dla ustawień
+        settingsScene = createStandardMenuScene(layout, 400, 350);
+    }
+
+    // --- HELPER METHODS ---
+    private Button createStyledButton(String text) {
+        Button btn = new Button(text);
+        btn.setPrefWidth(200);
+        btn.setPrefHeight(40);
+        btn.setStyle("-fx-font-size: 18px; -fx-base: #444444; -fx-text-fill: white; -fx-cursor: hand;");
+        return btn;
     }
 }
