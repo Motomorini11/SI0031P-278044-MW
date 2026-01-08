@@ -29,12 +29,12 @@ public class MainMenu {
     public void start(Stage primaryStage) {
         this.stage = primaryStage;
 
-        // 1. Build the scenes
+
         createMainScene();
         createLevelSelectScene();
         createSettingsScene();
 
-        // 2. Set up the Stage
+
         primaryStage.setTitle("Not Mario");
         primaryStage.initStyle(StageStyle.UNDECORATED);
 
@@ -49,29 +49,25 @@ public class MainMenu {
         primaryStage.show();
     }
 
-    // --- ZMODYFIKOWANA METODA: Dodano parametr 'width' (szerokość pudełka) ---
-    // --- ZMODYFIKOWANA METODA: Dodano parametr 'height' (wysokość) ---
     private Scene createStandardMenuScene(VBox contentBox, int width, int height) {
         // 1. Stylizacja pudełka
         contentBox.setAlignment(Pos.CENTER);
         contentBox.setStyle("-fx-background-color: rgba(0, 0, 0, 0.6); -fx-background-radius: 20; -fx-padding: 30;");
 
-        // USTAWIAMY SZEROKOŚĆ I WYSOKOŚĆ NA SZTYWNO
+
         contentBox.setMinWidth(width);
         contentBox.setMaxWidth(width);
 
-        contentBox.setMinHeight(height); // <-- NOWOŚĆ
-        contentBox.setMaxHeight(height); // <-- NOWOŚĆ
+        contentBox.setMinHeight(height);
+        contentBox.setMaxHeight(height);
 
-        // 2. Główny kontener (StackPane)
         StackPane root = new StackPane();
 
-        // 3. Ładujemy tło
         try {
             Image bgImage = new Image(getClass().getResourceAsStream("/assets/MainMenu_background.png"));
             ImageView bgView = new ImageView(bgImage);
 
-            // Rozciągamy tło
+
             bgView.fitWidthProperty().bind(stage.widthProperty());
             bgView.fitHeightProperty().bind(stage.heightProperty());
 
@@ -82,7 +78,7 @@ public class MainMenu {
             root.setStyle("-fx-background-color: gray;");
         }
 
-        // 4. Dodajemy pudełko na wierzch
+
         root.getChildren().add(contentBox);
 
         return new Scene(root, 800, 600);
@@ -90,7 +86,7 @@ public class MainMenu {
 
     // --- SCENE 1: MAIN MENU ---
     private void createMainScene() {
-        // USUNIĘTO: Tytuł tekstowy (jest na grafice)
+
 
         Button btnStart = createStyledButton("START GAME");
         Button btnSettings = createStyledButton("SETTINGS");
@@ -106,7 +102,7 @@ public class MainMenu {
         VBox layout = new VBox(20);
         layout.getChildren().addAll(btnStart, btnSettings, btnQuit);
 
-        // Ustawiam wąskie pudełko (350px) - idealne dla pionowej listy przycisków
+
         mainScene = createStandardMenuScene(layout, 350, 300);
     }
 
@@ -128,7 +124,6 @@ public class MainMenu {
                 System.out.println("Loading Level " + levelNum + "...");
                 GameScene game = new GameScene(stage, mainScene, levelNum);
                 stage.setScene(game);
-                // Usunięto requestFocus()
             });
 
             levelContainer.getChildren().add(lvlBtn);
@@ -140,7 +135,7 @@ public class MainMenu {
         VBox layout = new VBox(40);
         layout.getChildren().addAll(titleLabel, levelContainer, btnBack);
 
-        // Ustawiam SZEROKIE pudełko (800px) - żeby przyciski poziomów się zmieściły w poziomie!
+
         levelSelectScene = createStandardMenuScene(layout, 800, 400);
     }
 
@@ -166,7 +161,6 @@ public class MainMenu {
         VBox layout = new VBox(30);
         layout.getChildren().addAll(titleLabel, musicCheck, btnBack);
 
-        // Średnie pudełko dla ustawień
         settingsScene = createStandardMenuScene(layout, 400, 350);
     }
 
