@@ -24,7 +24,6 @@ public class MainMenu {
     private Scene mainScene;
     private Scene levelSelectScene;
     private Scene settingsScene;
-    private boolean isMusicOn = true;
 
     public void start(Stage primaryStage) {
         this.stage = primaryStage;
@@ -50,7 +49,7 @@ public class MainMenu {
     }
 
     private Scene createStandardMenuScene(VBox contentBox, int width, int height) {
-        // 1. Stylizacja pudełka
+
         contentBox.setAlignment(Pos.CENTER);
         contentBox.setStyle("-fx-background-color: rgba(0, 0, 0, 0.6); -fx-background-radius: 20; -fx-padding: 30;");
 
@@ -74,10 +73,8 @@ public class MainMenu {
             root.getChildren().add(bgView);
 
         } catch (Exception e) {
-            System.out.println("Nie udało się załadować tła! Sprawdź nazwę pliku.");
             root.setStyle("-fx-background-color: gray;");
         }
-
 
         root.getChildren().add(contentBox);
 
@@ -92,7 +89,10 @@ public class MainMenu {
         Button btnSettings = createStyledButton("SETTINGS");
         Button btnQuit = createStyledButton("QUIT");
 
-        btnStart.setOnAction(e -> stage.setScene(levelSelectScene));
+        btnStart.setOnAction(e -> {
+            createLevelSelectScene();
+            stage.setScene(levelSelectScene);
+        });
         btnSettings.setOnAction(e -> stage.setScene(settingsScene));
         btnQuit.setOnAction(e -> {
             Platform.exit();
@@ -106,7 +106,7 @@ public class MainMenu {
         mainScene = createStandardMenuScene(layout, 350, 300);
     }
 
-    // --- SCENE 2: LEVEL SELECT ---
+    // --- SCENE 2: LEVEL SELECT  ---
     private void createLevelSelectScene() {
         Label titleLabel = new Label("SELECT LEVEL");
         titleLabel.setTextFill(Color.WHITE);
@@ -115,16 +115,28 @@ public class MainMenu {
         HBox levelContainer = new HBox(15);
         levelContainer.setAlignment(Pos.CENTER);
 
+
+        int maxUnlockedLevel = SaveSystem.loadProgress();
+
         for (int i = 1; i <= 5; i++) {
             int levelNum = i;
             Button lvlBtn = createStyledButton("Level " + i);
             lvlBtn.setPrefWidth(100);
 
-            lvlBtn.setOnAction(e -> {
-                System.out.println("Loading Level " + levelNum + "...");
-                GameScene game = new GameScene(stage, mainScene, levelNum);
-                stage.setScene(game);
-            });
+
+            if (i > maxUnlockedLevel) {
+
+                lvlBtn.setDisable(true);
+                lvlBtn.setStyle("-fx-base: #222222; -fx-text-fill: gray; -fx-font-size: 18px;");
+                lvlBtn.setText("LOCKED"); // Opcjonalnie: zmiana tekstu
+            } else {
+
+                lvlBtn.setOnAction(e -> {
+                    System.out.println("Loading Level " + levelNum + "...");
+                    GameScene game = new GameScene(stage, mainScene, levelNum);
+                    stage.setScene(game);
+                });
+            }
 
             levelContainer.getChildren().add(lvlBtn);
         }
@@ -134,7 +146,6 @@ public class MainMenu {
 
         VBox layout = new VBox(40);
         layout.getChildren().addAll(titleLabel, levelContainer, btnBack);
-
 
         levelSelectScene = createStandardMenuScene(layout, 800, 400);
     }
@@ -147,12 +158,13 @@ public class MainMenu {
 
         CheckBox musicCheck = new CheckBox("Music On");
         musicCheck.setTextFill(Color.WHITE);
-        musicCheck.setSelected(isMusicOn);
         musicCheck.setFont(new Font("Arial", 20));
 
+        musicCheck.setSelected(true);
+
         musicCheck.setOnAction(e -> {
-            isMusicOn = musicCheck.isSelected();
-            System.out.println("Music set to: " + isMusicOn);
+            boolean isOn = musicCheck.isSelected();
+            SoundManager.setMusicEnabled(isOn);
         });
 
         Button btnBack = createStyledButton("BACK");

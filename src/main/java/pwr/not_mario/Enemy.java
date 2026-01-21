@@ -9,7 +9,7 @@ import java.util.List;
 public class Enemy extends Rectangle {
 
     private double speed = 1.0;
-    private int direction = 1; // 1 = prawo, -1 = lewo
+    private int direction = 1;
     public static final int ENEMY_SIZE = 60;
 
     public Enemy(double x, double y, int levelNumber) {
@@ -31,9 +31,6 @@ public class Enemy extends Rectangle {
     public void update(List<Rectangle> platforms) {
 
         this.setX(this.getX() + (speed * direction));
-
-
-        boolean shouldTurn = false;
 
 
         double checkX = (direction == 1) ? getX() + getWidth() + 5 : getX() - 5;

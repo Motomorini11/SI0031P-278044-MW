@@ -18,6 +18,8 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import javafx.scene.paint.ImagePattern;
+import javafx.animation.PauseTransition;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +29,7 @@ public class GameScene extends Scene {
     private Stage stage;
     private Scene mainMenuScene;
 
-    // --- Game Objects ---
+    // --- Game Objects ---------------------
     private Group root;
     private Group gameWorld;
     private Group gameUI;
@@ -44,22 +46,22 @@ public class GameScene extends Scene {
     private List<Rectangle> finishLines = new ArrayList<>();
     private Group levelCompletedMenu;
 
-    // --- Stats ---
+    // --- Stats ---------------------
     private int score = 0;
     private int lives = 3;
     private int maxCoins = 0;
 
-    // --- UI Elements ---
+    // --- UI Elements ----------------
     private Label scoreLabel;
     private Label livesLabel;
     private Label statsLabel;
 
-    // --- Input State ---
+    // --- Input State -----------------------
     private boolean isLeftPressed = false;
     private boolean isRightPressed = false;
     private boolean isSpacePressed = false;
 
-    // --- Physics Constants ---
+    // --- Physics Constants ----------------
     private static final double GRAVITY = 0.8;
     private static final double JUMP_STRENGTH = 18.0;
     private static final double MAX_SPEED = 7.0;
@@ -67,18 +69,19 @@ public class GameScene extends Scene {
     private double friction = 0.9;
     private static final int BLOCK_SIZE = 60;
 
-    // --- Physics State ---
+    // --- Physics State ------------
     private double playerVelocityY = 0;
     private double playerVelocityX = 0; // NOWE: Prędkość pozioma
     private boolean isGrounded = false;
 
-    // ------ Spawn Point ---------
+    // ------ Spawn Point ---------------
     private double spawnX = 100;
     private double spawnY = 100;
 
-    // --- Game State ---
+    // --- Game State ---------------------------
     private boolean isPaused = false;
     private boolean isGameOver = false;
+    private boolean isRespawning = false;
     private boolean isInvincible = false;
     private double invincibilityTimer = 0;
     private static final double INVINCIBILITY_DURATION = 2.0;
@@ -86,6 +89,7 @@ public class GameScene extends Scene {
     private boolean isLevelCompleted = false;
 
     private AnimationTimer timer;
+    private double levelWidth;
 
     public GameScene(Stage stage, Scene mainMenuScene, int levelNumber) {
         super(new Group(), 800, 600, Color.LIGHTBLUE);
@@ -94,7 +98,7 @@ public class GameScene extends Scene {
         this.stage = stage;
         this.mainMenuScene = mainMenuScene;
 
-        // Initialize Groups
+        // Groups--------------------------
         gameWorld = new Group();
         gameUI = new Group();
         pauseMenu = new Group();
@@ -114,10 +118,16 @@ public class GameScene extends Scene {
         setupInputs();
         createGameLoop();
 
+        if (levelNumber == 5) {
+            SoundManager.playMusic("Pixel Quest (Boss)");
+        } else {
+            SoundManager.playMusic("Pixel Quest ");
+        }
+
         timer.start();
     }
 
-    // --- 1. HUD / UI (Updated for Readability) ---
+    // ---  UI  ---------------------------------------------------------------------------------------------------
     private void createUI() {
 
         HBox uiContainer = new HBox(30);
@@ -147,7 +157,7 @@ public class GameScene extends Scene {
         livesLabel.setText("Lives: " + "❤".repeat(Math.max(0, lives)));
     }
 
-    // ---  GAME OVER MENU ---
+    // ---  GAME OVER  =======================================================================================
     private void createGameOverMenu() {
         Rectangle overlay = new Rectangle();
         overlay.setFill(Color.DARKRED); // Scary red tint
@@ -158,6 +168,11 @@ public class GameScene extends Scene {
         Label title = new Label("GAME OVER");
         title.setTextFill(Color.WHITE);
         title.setFont(Font.font("Arial", FontWeight.BOLD, 80));
+
+        Label restartLabel = new Label("Press 'R' to Restart");
+        restartLabel.setTextFill(Color.YELLOW); // Żółty rzuca się w oczy
+        restartLabel.setFont(Font.font("Arial", FontWeight.BOLD, 30));
+        restartLabel.setStyle("-fx-effect: dropshadow(three-pass-box, black, 5, 0, 0, 0);");
 
         Label subTitle = new Label("Press SPACEBAR to exit");
         subTitle.setTextFill(Color.WHITE);
@@ -175,19 +190,21 @@ public class GameScene extends Scene {
         layout.setAlignment(Pos.CENTER);
         layout.prefWidthProperty().bind(stage.widthProperty());
         layout.prefHeightProperty().bind(stage.heightProperty());
-        layout.getChildren().addAll(title, subTitle);
+        layout.getChildren().addAll(title,restartLabel, subTitle);
 
         gameOverMenu.getChildren().addAll(overlay, layout);
         gameOverMenu.setVisible(false);
     }
 
     private void triggerGameOver() {
+        SoundManager.stopMusic();
+        SoundManager.playSound("fail");
         isGameOver = true;
         timer.stop();
         gameOverMenu.setVisible(true);
         gameWorld.setEffect(new BoxBlur(10, 10, 3));
     }
-
+    //======== Level Completed ==================================================================================
     private void createLevelCompletedMenu() {
 
 
@@ -233,20 +250,22 @@ public class GameScene extends Scene {
         levelCompletedMenu.setVisible(false);
     }
     private void triggerLevelCompleted() {
+        SoundManager.stopMusic();
+        SoundManager.playSound("win");
         isLevelCompleted = true;
         timer.stop();
+        SaveSystem.saveProgress(currentLevelNumber + 1);
         statsLabel.setText("Coins collected: " + score + " / " + maxCoins);
         levelCompletedMenu.setVisible(true);
         gameWorld.setEffect(new BoxBlur(10, 10, 3));
 
-        // Tutaj w przyszłości logika odblokowywania Levelu + 1 ???????????????????????????????????????????????????????????
     }
 
     // ---  PHYSICS & LOGIC UPDATE =================================================================================
     private void update() {
         if (isPaused || isGameOver) return;
 
-        // --- OBSŁUGA NIEŚMIERTELNOŚCI ------------------------------------------------------------------------
+        // Invincibility ----------------------
         if (isInvincible) {
             invincibilityTimer -= 0.016;
 
@@ -264,51 +283,72 @@ public class GameScene extends Scene {
             }
         }
 
-        // Movement
-        if (isLeftPressed) {
-            playerVelocityX -= ACCELERATION;
-        }
-        if (isRightPressed) {
-            playerVelocityX += ACCELERATION;
+        // Movement----------------------
+        if (!isRespawning) {
+            if (isLeftPressed) {
+                playerVelocityX -= ACCELERATION;
+            }
+            if (isRightPressed) {
+                playerVelocityX += ACCELERATION;
+            }
         }
 
-        // Tarcie
+        // Friction ---------------------
         playerVelocityX *= friction;
 
-        // Ograniczenie prędkości
+        // Movment speed ----------------------------------------------
         if (playerVelocityX > MAX_SPEED) playerVelocityX = MAX_SPEED;
         if (playerVelocityX < -MAX_SPEED) playerVelocityX = -MAX_SPEED;
 
         if (Math.abs(playerVelocityX) < 0.1) playerVelocityX = 0;
 
-        // Grawitacja
+        // Gravitation ----------------
         playerVelocityY += GRAVITY;
 
-        // Skok
+        // Jump -----------------------------
         if (isSpacePressed && isGrounded) {
             playerVelocityY = -JUMP_STRENGTH;
             isGrounded = false;
+            SoundManager.playSound("jump");
         }
 
-        // --- 2. RUCH I KOLIZJE (AABB) ---
+        // ---  Movment -----------
 
         movePlayerX();
         movePlayerY();
 
         // Wall Left
         if (player.getX() < 0) player.setX(0);
-
+        // Wall Right
+        if (player.getX() > levelWidth - player.getWidth()) {
+            player.setX(levelWidth - player.getWidth());
+        }
 
         checkCoinCollection();
 
-        // ---  DEATH BY VOID (Falling off map) ---
-        if (player.getY() > stage.getHeight() + 200) { // +200 buffer so we fall completely off screen
-            handleDeath();
+        // Fall Mechanic ----------------------------------------------------
+        if (player.getY() > stage.getHeight() + 200 && !isRespawning) {
+
+            isRespawning = true;
+            SoundManager.playSound("fall");
+            playerVelocityX = 0;
+
+            PauseTransition delay = new PauseTransition(Duration.seconds(1.0));
+            delay.setOnFinished(event -> {
+
+                handleDeath();
+                isRespawning = false;
+            });
+            delay.play();
         }
 
-        // Camera Logic
+        // Camera Logic -------------------------------------------------------------
         double cameraX = -player.getX() + (getWidth() / 2) - (player.getWidth() / 2);
         if (cameraX > 0) cameraX = 0;
+        double minCameraX = -(levelWidth - getWidth());
+
+        if (cameraX < minCameraX) {
+            cameraX = minCameraX;}
         gameWorld.setTranslateX(cameraX);
 
 
@@ -328,6 +368,7 @@ public class GameScene extends Scene {
                 if (isFalling && playerBottom < enemyTop + 20) {
                     playerVelocityY = -10;
                     gameWorld.getChildren().remove(enemy);
+                    SoundManager.playSound("kill");
                     return true;
                 }
 
@@ -340,7 +381,7 @@ public class GameScene extends Scene {
             }
             return false;
         });
-
+        // LevelComplete testing ------------------------------
         if (!isLevelCompleted) {
             for (Rectangle finish : finishLines) {
                 if (player.getBoundsInParent().intersects(finish.getBoundsInParent())) {
@@ -349,12 +390,12 @@ public class GameScene extends Scene {
                 }
             }
         }
-
+        // Falling Hazards level selection ------------------------------
         if (currentLevelNumber == 3 || currentLevelNumber == 5) {
             spawnAndMoveHazards();
         }
     }
-
+    // Death Mechanic ---------------------------------
     private void handleDeath() {
         lives--;
         updateStatsUI();
@@ -365,9 +406,9 @@ public class GameScene extends Scene {
             triggerGameOver();
         }
     }
-
+    // Respawn Mechanic --------------------------------
     private void respawnPlayer() {
-        // Reset Position
+
         player.setX(spawnX);
         player.setY(spawnY);
         playerVelocityY = 0;
@@ -385,12 +426,13 @@ public class GameScene extends Scene {
         gameWorld.getChildren().clear();
         gameWorld.getChildren().add(player);
 
-        //  Wybieramy mapę
         int levelIndex = levelNumber - 1;
         if (levelIndex >= LevelData.LEVELS.length || levelIndex < 0) {
             levelIndex = 0;
         }
         String[] currentLevel = LevelData.LEVELS[levelIndex];
+
+
 
 
         Color themeColor;
@@ -401,13 +443,13 @@ public class GameScene extends Scene {
                 themeColor = Color.WHITE;      // Śnieg (Level 2)
                 break;
             case 3:
-                themeColor = Color.SANDYBROWN; // Piasek/Plaża (Level 3)
+                themeColor = Color.SANDYBROWN; // Plaża (Level 3)
                 break;
             case 4:
-                themeColor = Color.DIMGRAY;    // Kamień/Jaskinia (Level 4)
+                themeColor = Color.DIMGRAY;    // Góry (Level 4)
                 break;
             case 5:
-                themeColor = Color.DARKRED;    // Wulkan/Magma (Level 5)
+                themeColor = Color.DARKRED;    // Wulkan (Level 5)
                 break;
             default:
                 themeColor = Color.FORESTGREEN; // Trawa
@@ -416,6 +458,7 @@ public class GameScene extends Scene {
         // ------------------------------------------------
 
         double levelHeight = currentLevel.length * BLOCK_SIZE;
+        this.levelWidth = currentLevel[0].length() * BLOCK_SIZE;
         double startY = stage.getHeight() - levelHeight;
 
         for (int row = 0; row < currentLevel.length; row++) {
@@ -424,7 +467,7 @@ public class GameScene extends Scene {
                 char cell = line.charAt(col);
                 double x = col * BLOCK_SIZE;
                 double y = startY + (row * BLOCK_SIZE);
-
+                // Block ------------------------------------------------------
                 if (cell == '1') {
 
                     Rectangle block = new Rectangle(x, y, BLOCK_SIZE, BLOCK_SIZE);
@@ -436,21 +479,22 @@ public class GameScene extends Scene {
                     gameWorld.getChildren().add(block);
                     platforms.add(block);
                 }
+                // ICE --------------------------------------------------------
                 else if (cell == 'I') {
-                    // BLOK LODU
-                    Rectangle iceBlock = new Rectangle(x, y, BLOCK_SIZE, BLOCK_SIZE);
 
+                    Rectangle iceBlock = new Rectangle(x, y, BLOCK_SIZE, BLOCK_SIZE);
 
                     iceBlock.setFill(Color.DEEPSKYBLUE);
                     iceBlock.setStroke(Color.BLUE);
 
-                    iceBlock.setUserData("ICE"); // Ważne dla fizyki!
+                    iceBlock.setUserData("ICE");
 
                     gameWorld.getChildren().add(iceBlock);
                     platforms.add(iceBlock);
                 }
+                // MONETA --------------------------------------------------------------------
                 else if (cell == 'C') {
-                    // MONETA
+
                     try {
                         Image coinImg = new Image(getClass().getResourceAsStream("/assets/coin.png"));
                         ImageView coinView = new ImageView(coinImg);
@@ -458,6 +502,7 @@ public class GameScene extends Scene {
                         coinView.setFitHeight(40);
                         coinView.setX(x + (BLOCK_SIZE - 40) / 2);
                         coinView.setY(y + (BLOCK_SIZE - 40) / 2);
+                        coinView.setViewOrder(-2.0);
                         gameWorld.getChildren().add(coinView);
                         coins.add(coinView);
                         maxCoins++;
@@ -467,17 +512,58 @@ public class GameScene extends Scene {
                         coins.add(coinFallback);
                     }
                 }
+                // PRZECIWNIK -------------------------------------------------------------
                 else if (cell == 'E') {
-                    // PRZECIWNIK
+
                     Enemy enemy = new Enemy(x + 5, y+ (BLOCK_SIZE - Enemy.ENEMY_SIZE) + 1, levelNumber);
+                    enemy.setViewOrder(-1.0);
                     gameWorld.getChildren().add(enemy);
                     enemies.add(enemy);
                 }
+                // Flag -----------------------------------------------------------------------
                 else if (cell == 'F') {
-                    Rectangle finishRect = new Rectangle(x, y, BLOCK_SIZE, BLOCK_SIZE);
+                    try {
+
+                        String flagPath = "/assets/flag" + levelNumber + ".png";
+                        Image flagImg;
+
+
+                        if (getClass().getResource(flagPath) != null) {
+                            flagImg = new Image(getClass().getResourceAsStream(flagPath));
+                        } else {
+
+                            flagImg = new Image(getClass().getResourceAsStream("/assets/flag1.png"));
+                        }
+
+                        ImageView flagView = new ImageView(flagImg);
+
+                        double flagHeight = BLOCK_SIZE * 5; // 180 px
+                        double flagWidth = BLOCK_SIZE * 1.5;      // 60 px
+
+                        flagView.setFitWidth(flagWidth);
+                        flagView.setFitHeight(flagHeight);
+
+                        flagView.setX(x);
+                        flagView.setY(y + BLOCK_SIZE - flagHeight);
+
+                        gameWorld.getChildren().add(flagView);
+
+                    } catch (Exception e) {
+                        Rectangle flagPole = new Rectangle(x + 25, y - (BLOCK_SIZE * 2), 10, BLOCK_SIZE * 3);
+                        flagPole.setFill(Color.PURPLE);
+                        gameWorld.getChildren().add(flagPole);
+                    }
+
+
+
+                    double hitBoxWidth = 60;
+                    double offset = (90 - hitBoxWidth);
+
+                    Rectangle finishRect = new Rectangle(x + offset, y, hitBoxWidth, BLOCK_SIZE);
+
 
                     finishRect.setFill(Color.TRANSPARENT);
-                    finishRect.setStroke(Color.RED); // TESTY METY
+                    //finishRect.setStroke(Color.RED); // TESTY ???????????????????????????????????????????????????
 
                     gameWorld.getChildren().add(finishRect);
                     finishLines.add(finishRect);
@@ -495,13 +581,6 @@ public class GameScene extends Scene {
                 bgView.setFitWidth(stage.getWidth());
                 bgView.setFitHeight(stage.getHeight());
                 backgroundLayer.getChildren().add(bgView);
-            } else {
-
-                Color bgColor = Color.LIGHTBLUE;
-                if (levelNumber == 4) bgColor = Color.BLACK;
-                if (levelNumber == 5) bgColor = Color.ORANGERED.desaturate();
-
-                backgroundLayer.getChildren().add(new Rectangle(stage.getWidth(), stage.getHeight(), bgColor));
             }
         } catch (Exception e) {
             backgroundLayer.getChildren().add(new Rectangle(stage.getWidth(), stage.getHeight(), Color.LIGHTBLUE));
@@ -510,14 +589,16 @@ public class GameScene extends Scene {
         player.toFront();
     }
 
-
+    // Inputs ====================================================================================
     private void setupInputs() {
         this.setOnKeyPressed(event -> {
-
 
             if (isGameOver) {
                 if (event.getCode() == javafx.scene.input.KeyCode.SPACE) {
                     returnToMenu();
+                }
+                if (event.getCode() == javafx.scene.input.KeyCode.R) {
+                    restartLevel();
                 }
                 return;
             }
@@ -546,12 +627,24 @@ public class GameScene extends Scene {
         });
     }
 
-    // --- Standard Methods  ---
+    // --- create methods  ---------------------------------------------------------------
     private void createPlayer() {
-        player = new Rectangle(50, 50, Color.RED);
-        player.setX(spawnX);
-        player.setY(spawnY);
-        gameWorld.getChildren().add(player);
+
+        player = new Rectangle(50, 50);
+        player.setViewOrder(-2.0);
+        respawnPlayer();
+
+        try {
+
+            Image playerImg = new Image(getClass().getResourceAsStream("/assets/Ola.png"));
+            player.setFill(new ImagePattern(playerImg));
+
+        } catch (Exception e) {
+            player.setFill(Color.RED);
+        }
+        if (!gameWorld.getChildren().contains(player)) {
+            gameWorld.getChildren().add(player);
+        }
     }
 
     private void createGameLoop() {
@@ -563,6 +656,7 @@ public class GameScene extends Scene {
         };
     }
 
+    // Move Player ===========================================================================================
     private void movePlayerX() {
         player.setX(player.getX() + playerVelocityX);
 
@@ -594,7 +688,7 @@ public class GameScene extends Scene {
             playerVelocityX = 0;
         }
     }
-
+    //Move player 2 ======================================================================================
     private void movePlayerY() {
         player.setY(player.getY() + playerVelocityY);
 
@@ -614,7 +708,6 @@ public class GameScene extends Scene {
                 }
 
                 if (playerVelocityY > 0) {
-                    // Lądowanie
                     player.setY(platform.getY() - player.getHeight());
                     isGrounded = true;
                     playerVelocityY = 0;
@@ -636,19 +729,20 @@ public class GameScene extends Scene {
             }
         }
     }
-
+    // Coin collection ------------------------------------------------------------------
     private void checkCoinCollection() {
         coins.removeIf(coin -> {
             if (player.getBoundsInParent().intersects(coin.getBoundsInParent())) {
                 gameWorld.getChildren().remove(coin);
                 score++;
                 updateStatsUI();
+                SoundManager.playSound("coin");
                 return true;
             }
             return false;
         });
     }
-
+    // Pause Menu ===========================================================================
     private void createPauseMenu() {
 
         Rectangle overlay = new Rectangle();
@@ -692,10 +786,12 @@ public class GameScene extends Scene {
         isPaused = !isPaused;
         if (isPaused) {
             timer.stop();
+            SoundManager.pauseMusic();
             pauseMenu.setVisible(true);
             gameWorld.setEffect(new BoxBlur(10, 10, 3));
         } else {
             timer.start();
+            SoundManager.resumeMusic();
             pauseMenu.setVisible(false);
             gameWorld.setEffect(null);
         }
@@ -703,12 +799,15 @@ public class GameScene extends Scene {
 
     private void returnToMenu() {
         timer.stop();
+        SoundManager.stopMusic();
+        SoundManager.playMusic("Pixel Quest ");
         stage.setScene(mainMenuScene);
         stage.setWidth(stage.getWidth());
         stage.setHeight(stage.getHeight());
         gameWorld.setEffect(null);
     }
     private void playerTakeDamage() {
+        SoundManager.playSound("hurt");
         lives--;
         updateStatsUI();
 
@@ -727,7 +826,8 @@ public class GameScene extends Scene {
 
         if (hazardSpawnTimer <= 0) {
 
-            double randomX = Math.random() * (stage.getWidth() - 40);
+            double cameraX = -gameWorld.getTranslateX();
+            double randomX = cameraX + (Math.random() * (stage.getWidth() - 40));
 
             FallingHazard hazard = new FallingHazard(randomX, -50, currentLevelNumber);
 
@@ -761,5 +861,15 @@ public class GameScene extends Scene {
 
             return false;
         });
+    }
+    private void restartLevel() {
+        System.out.println("Restarting Level " + currentLevelNumber + "...");
+
+        timer.stop();
+        SoundManager.stopMusic();
+
+        GameScene newGame = new GameScene(stage, mainMenuScene, currentLevelNumber);
+
+        stage.setScene(newGame);
     }
 }
